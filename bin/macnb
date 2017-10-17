@@ -1,0 +1,173 @@
+#!/bin/bash
+# -*- shell-script -*-
+
+COMMAND=$(basename $0)
+ROOT=$HOME
+# stands for housekeeping
+HKP=$ROOT/.macnb
+
+####################
+# turn on with -v
+verbose=
+
+
+function verbose() {
+    [ -z "$verbose" ] && return
+    echo >&2 "$@"
+}
+
+
+# static port for now
+function get-free-port() {
+    echo 9999
+}
+
+
+# return 0 if false (cannot find)
+# or 1 if true (the pid as recorded in our pid file is up and running) 
+function running-jupyter() {
+    verbose "running-jupyter"
+    local recorded_pid=$(cat $HKP/pid 2> /dev/null)
+    # return false if not found
+    [ -z "$recorded_pid" ] && return 1
+    # return false if process is not alive
+    ps $recorded_pid >& /dev/null || return 1
+    # return false if pid not found among meaningful processes
+    pgrep -f jupyter-notebook | grep --silent '^'"${recorded_pid}"'$' || return 1
+    return 0
+}
+
+
+global_options="--NotebookApp.iopub_data_rate_limit=10000000000"
+
+# does not check for another running instance
+function start-jupyter() {
+    cd $ROOT
+    verbose "start-jupyter"
+    local token=$(echo $RANDOM-$RANDOM)
+    local port=$(get-free-port)
+    local command="nohup jupyter notebook --port $port --no-browser --NotebookApp.token=\"$token\" $global_options"
+    verbose "starting $command"
+    $command < /dev/null 2> $HKP/log &
+    echo $! > $HKP/pid
+    echo $token > $HKP/token
+    echo $port > $HKP/port
+    cd - >& /dev/null
+}
+
+
+function running-or-start-jupyter() {
+    running-jupyter || start-jupyter
+}
+
+
+function kill-jupyter() {
+    verbose "kill-jupyter"
+    local recorded_pid=$(cat $HKP/pid 2> /dev/null)
+    # return false if not found
+    [ -z "$recorded_pid" ] && { verbose "pid not found from $HKP/pid" ; return 1; }
+    verbose "killing pid $pid"
+    kill $recorded_pid
+    rm $HKP/pid $HKP/port $HKP/token
+}
+
+function list-jupyter() {
+    pids=$(pgrep -f jupyter)
+    if [ -z "$pids" ]; then
+	echo no running jupyter
+    else
+	ps $pids
+    fi
+}
+####################
+function relative-path() {
+    path=$1; shift
+    local abs_root=$(cd $ROOT; pwd -P)
+    if [ -d $path ]; then
+	local abs_path=$(cd $path; pwd -P)
+    else
+	local filename=$(basename $path)
+	local abs_file_dir=$(cd $(dirname $path); pwd -P)
+	local abs_path=$abs_file_dir/$filename
+    fi
+    echo $abs_path | sed -e "s,$abs_root,,"
+}
+
+function open-notebooks() {
+    local notebook
+    local port=$(cat $HKP/port)
+    local token=$(cat $HKP/token)
+    if [[ -z "$@" ]]; then
+	args="."
+    else
+	args="$@"
+    fi
+    for notebook in $args; do
+	local path=""
+	local _path; for _path in "$notebook" "$notebook".ipynb; do
+	    verbose "Trying file $_path"
+	    [ -e $_path ] && { path=$_path; break; }
+	    verbose nope
+	done
+	if [ -z "$path" ]; then
+	    echo "Cannot spot notebook $notebook - ignored" >& 2
+	    continue
+	fi
+	local url
+	if [ -d "$path" ]; then
+	    url="http://localhost:$port/tree$(relative-path $path)"
+	else
+	    url="http://localhost:$port/notebooks$(relative-path $path)"
+	fi
+	url="$url?token=$token"
+	verbose "opening url $url"
+	open $url
+    done
+}
+
+USAGE="Usage: $COMMAND [-l] [-k]
+   or: $COMMAND [-r root] [notebooks or dirs]
+Modes:
+  -l: list running jupyters (default if commmand contains 'list')
+  -k: kill jupyters (default if command contains 'kill')
+  none: open notebook(s) or directory in browser
+Options:
+  -r root: select an alternative root (default is $HOME)
+"
+
+function main() {
+    while getopts "kldr:v" opt; do
+	case $opt in 
+	    k) kill_mode=true;;
+	    l) list_mode=true;;
+	    d) dir_mode=true;;
+	    r) ROOT="$OPTARG"; HKP=$ROOT/.macnb ;;
+	    v) verbose=true;;
+            \?) >&2 printf "$USAGE" ; exit 1;;
+        esac
+    done
+    shift $(($OPTIND - 1))
+
+    verbose "Managing jupyter server in $ROOT"
+    [ -d $HKP ] || mkdir $HKP
+
+    if [ -n "$kill_mode" ]; then
+	kill-jupyter
+    elif [ -n "$list_mode" ]; then
+	list-jupyter
+    elif [ -n "$dir_mode" ]; then
+	running-or-start-jupyter
+	open-directories "$@"
+    else
+	running-or-start-jupyter
+	open-notebooks "$@"
+    fi
+
+}
+
+case "$COMMAND" in
+    *kill*) kill_mode=true;;
+    *list*) list_mode=true;;
+esac
+
+main "$@"
