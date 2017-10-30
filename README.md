@@ -26,7 +26,7 @@ you need to create 3 symlinks in your `PATH`; for example (tweak according to yo
 cd ~/git
 git clone https://github.com/parmentelat/mac-notebook.git
 for name in macnb-open macnb-list macnb-kill; do
-   sudo ln -s /usr/local/bin/$name ~/git/mac-notebook/bin/macnb
+   sudo ln -s ~/git/mac-notebook/bin/macnb /usr/local/bin/$name 
 done
 ```
 
