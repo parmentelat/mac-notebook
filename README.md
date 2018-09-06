@@ -60,7 +60,7 @@ From that point, you can select this application from the finder:
 It's nicer if your app shows the jupyter logo:
 
 ```
-cp mac-notebook.icns /Applications/mac-notebook.app/Contents/Resources/AutomatorApplet.icns
+cp ~/git/mac-notebook/mac-notebook.icns /Applications/mac-notebook.app/Contents/Resources/AutomatorApplet.icns
 ``` 
 
 ## Devel note
