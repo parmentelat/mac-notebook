@@ -30,9 +30,9 @@ for name in macnb-open macnb-list macnb-kill; do
 done
 ```
 
-## finder
+## finder: create a macos app
 
-using Automator, you can easily create a native macos application that wraps `macnb-open`, and so have double-clicking on a `ipynb` file trigger this function.
+Using Automator, you can easily create a native macos application that wraps `macnb-open`, and so have double-clicking on a `ipynb` file trigger this function.
 
 Under automator:
 
@@ -47,8 +47,25 @@ Under automator:
 
 * save the application in `/Applications/mac-notebook`
 
-from that point, you can select this application from the finder:
+## finder - bind mouse clicks on .ipynb files
+
+From that point, you can select this application from the finder:
 
 * right-click on a `.ipynb` file, select `Get Info`
 * in the `Open with` area, select this newly created `mac-notebook` application,
-* optionnnally select `'Change All'` if you want this mapping to apply on all `ipynb` files.
+* optionally select `'Change All'` if you want this mapping to apply on all `ipynb` files.
+
+## finder - attach jupyter icon to that app
+
+It's nicer if your app shows the jupyter logo:
+
+```
+cp mac-notebook.icns /Applications/mac-notebook.app/Contents/Resources/AutomatorApplet.icns
+``` 
+
+## Devel note
+
+For the record, the way to generate the `.icns` file was:
+* from icon/jupyter-logo-transparent.png, extract a square portion
+* create the 10 variants of sizes in `icon.iconset` with these exact names
+* run `iconutil --convert icns -o mac-notebook.icns icon.iconset/` 
