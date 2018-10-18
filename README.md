@@ -42,7 +42,7 @@ Under automator:
 * then replace the script with (assuming you installed in `/usr/local/bin`)
 
 ```
-/usr/local/bin/macnb-open "$@"
+/usr/local/bin/macnb-open "$@" &
 ```
 
 * save the application in `/Applications/mac-notebook`
