@@ -136,11 +136,10 @@ Options:
 "
 
 function main() {
-    while getopts "kldr:v" opt; do
+    while getopts "klr:v" opt; do
 	case $opt in 
 	    k) kill_mode=true;;
 	    l) list_mode=true;;
-	    d) dir_mode=true;;
 	    r) ROOT="$OPTARG"; HKP=$ROOT/.macnb ;;
 	    v) verbose=true;;
             \?) >&2 printf "$USAGE" ; exit 1;;
@@ -155,14 +154,10 @@ function main() {
 	kill-jupyter
     elif [ -n "$list_mode" ]; then
 	list-jupyter
-    elif [ -n "$dir_mode" ]; then
-	running-or-start-jupyter
-	open-directories "$@"
     else
 	running-or-start-jupyter
 	open-notebooks "$@"
     fi
-
 }
 
 case "$COMMAND" in
