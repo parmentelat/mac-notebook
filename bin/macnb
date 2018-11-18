@@ -8,11 +8,11 @@ HKP=$ROOT/.macnb
 
 ####################
 # turn on with -v
-verbose=
+VERBOSE=
 
 
 function verbose() {
-    [ -z "$verbose" ] && return
+    [ -z "$VERBOSE" ] && return
     echo >&2 "$@"
 }
 
@@ -22,9 +22,9 @@ function get-free-port() {
     echo 9999
 }
 
-
+####################
 # return 0 if false (cannot find)
-# or 1 if true (the pid as recorded in our pid file is up and running) 
+# or 1 if true (the pid as recorded in our pid file is up and running)
 function running-jupyter() {
     verbose "running-jupyter"
     local recorded_pid=$(cat $HKP/pid 2> /dev/null)
@@ -137,11 +137,11 @@ Options:
 
 function main() {
     while getopts "klr:v" opt; do
-	case $opt in 
+	case $opt in
 	    k) kill_mode=true;;
 	    l) list_mode=true;;
 	    r) ROOT="$OPTARG"; HKP=$ROOT/.macnb ;;
-	    v) verbose=true;;
+	    v) VERBOSE=true;;
             \?) >&2 printf "$USAGE" ; exit 1;;
         esac
     done
