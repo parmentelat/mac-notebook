@@ -74,6 +74,7 @@ function locate-root() {
             local activator=$(ls $here/${VENV_PATTERN}/bin/activate | head -1)
             local topdir=$(dirname $(dirname $activator))
             if [ ! -f $topdir/bin/jupyter ]; then
+                cd ..
                 continue
             fi
             source $activator
@@ -82,6 +83,8 @@ function locate-root() {
             set-root $topdir
             break
         elif [ "$here" == "$canonical_home" ]; then
+            verbose "Deactivating just in case"
+            deactivate >& /dev/null
             set-root $here; break
         elif [ "$here" == "/" ]; then
             >&2 echo "you're not under your home directory - exiting"; exit 1
@@ -90,6 +93,26 @@ function locate-root() {
         fi
     done
     popd >& /dev/null
+}
+
+####################
+function list-all-jupyters() {
+    echo "============================== "
+    local tmpjson=/tmp/$$.json
+    jupyter notebook list --json > $tmpjson
+    python3 << EOF
+import json
+with open("$tmpjson") as feed:
+    records = [json.loads(line) for line in feed]
+if not records:
+    print("No jupyter notebook server running")
+else:
+    for record in records:
+        print(f"{record['notebook_dir']}: pid={record['pid']} - port={record['pid']}")
+EOF
+    echo "============================== "
+    pids=$(pgrep -f jupyter)
+    [ -n "$pids" ] && ps $pids
 }
 
 ####################
@@ -134,53 +157,36 @@ function running-or-start-jupyter() {
 
 
 function kill-jupyter() {
-    verbose "kill-jupyter"
-    local recorded_pid=$(cat $HKP/pid 2> /dev/null)
-    # return false if not found
-    [ -z "$recorded_pid" ] && { verbose "pid not found from $HKP/pid" ; return 1; }
-    verbose "killing pid $pid"
-    kill $recorded_pid
-    rm $HKP/pid $HKP/port $HKP/token
+    local notebook
+    for notebook in "$@"; do
+        locate-root $notebook
+        verbose "kill-jupyter"
+        local recorded_pid=$(cat $HKP/pid 2> /dev/null)
+        # return false if not found
+        [ -z "$recorded_pid" ] && { verbose "pid not found from $HKP/pid" ; return 1; }
+        verbose "killing pid $pid"
+        kill $recorded_pid
+        rm $HKP/pid $HKP/port $HKP/token
+    done
 }
 
 function list-jupyter() {
-    local pid=$(cat $HKP/pid)
-    if [ -z "$pid" ]; then
-        echo "No jupyter running in dir $ROOT"
-    else
-        ps $pid
-    fi
+    local notebook
+    for notebook in "$@"; do
+        locate-root $notebook
+        verbose "for $notebook: listing in $ROOT"
+        local pid=$(cat $HKP/pid 2> /dev/null)
+        if [ -z "$pid" ]; then
+            echo "No jupyter running in dir $ROOT"
+        else
+            ps $pid
+        fi
+    done
 }
-
-function list-all-jupyters() {
-    echo "============================== "
-    local tmpjson=/tmp/$$.json
-    jupyter notebook list --json > $tmpjson
-    python3 << EOF
-import json
-with open("$tmpjson") as feed:
-    records = [json.loads(line) for line in feed]
-if not records:
-    print("No jupyter notebook server running")
-else:
-    for record in records:
-        print(f"{record['notebook_dir']}: pid={record['pid']} - port={record['pid']}")
-EOF
-    echo "============================== "
-    pids=$(pgrep -f jupyter)
-    [ -n "$pids" ] && ps $pids
-}
-
 
 function open-notebooks() {
-    if [[ -z "$@" ]]; then
-        args="."
-    else
-        args="$@"
-    fi
-
     local notebook
-    for notebook in $args; do
+    for notebook in "$@"; do
         verbose ddealing with notebook $notebook
         local path=""
         local _path; for _path in "$notebook".ipynb "$notebook"; do
@@ -253,11 +259,18 @@ function main() {
 
     verbose "Managing jupyter server in $ROOT"
 
+    local args
+    if [[ -z "$@" ]]; then
+        args="."
+    else
+        args="$@"
+    fi
+
     case "$ACTION" in
-        kill) kill-jupyter;;
-        list) list-jupyter;;
         list_all) list-all-jupyters;;
-        *) open-notebooks "$@";;
+        kill) kill-jupyter $args;;
+        list) list-jupyter $args;;
+        *) open-notebooks  $args;;
     esac
 }
 
