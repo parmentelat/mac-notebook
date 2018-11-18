@@ -3,13 +3,15 @@
 
 COMMAND=$(basename $0)
 ROOT=$HOME
+# some regexp to find virtualenvs
+VENV_PATTERN="venv"
 # stands for housekeeping
 HKP=$ROOT/.macnb
 
-####################
+#################### helpers
 # turn on with -v
 VERBOSE=
-
+ACTION=open
 
 function verbose() {
     [ -z "$VERBOSE" ] && return
@@ -17,9 +19,77 @@ function verbose() {
 }
 
 
-# static port for now
+function set-root() {
+    local newroot="$1"
+    ROOT=$newroot
+    verbose "Using as ROOT $ROOT"
+    HKP=$ROOT/.macnb
+    [ -d $HKP ] || mkdir $HKP
+}
+
+
 function get-free-port() {
-    echo 9999
+    python3 << EOF
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.bind(('', 0))
+addr = s.getsockname()
+print(addr[1])
+s.close()
+EOF
+}
+
+
+function relative-path() {
+    path=$1; shift
+    local abs_root=$(cd $ROOT; pwd -P)
+    if [ -d $path ]; then
+        local abs_path=$(cd $path; pwd -P)
+    else
+        local filename=$(basename $path)
+        local abs_file_dir=$(cd $(dirname $path); pwd -P)
+        local abs_path=$abs_file_dir/$filename
+    fi
+    echo $abs_path | sed -e "s,$abs_root,,"
+}
+
+
+####################
+function locate-root() {
+    # open mode will pass us notebook paths
+    # other functions don't pass us anything
+    local wherefrom=$1; shift
+    [ -z "$wherefrom" ] && wherefrom=$(pwd -P)
+    [ -d "$wherefrom" ] || wherefrom=$(dirname $wherefrom)
+    [ -d "$wherefrom" ] || { 2>& echo "can't locate root from $wherefrom"; exit 1;}
+
+    # where to stop
+    local canonical_home=$(cd; pwd -P)
+    pushd $wherefrom >& /dev/null
+    while true; do
+        local here=$(pwd -P)
+        # check if we can find a virtualenv
+        ls -d $here/${VENV_PATTERN}/bin/activate >& /dev/null
+        if [ "$?" == "0" ] ; then
+            local activator=$(ls $here/${VENV_PATTERN}/bin/activate | head -1)
+            local topdir=$(dirname $(dirname $activator))
+            if [ ! -f $topdir/bin/jupyter ]; then
+                continue
+            fi
+            source $activator
+            verbose "Running in virtual env $activator"
+            topdir=$(dirname $topdir)
+            set-root $topdir
+            break
+        elif [ "$here" == "$canonical_home" ]; then
+            set-root $here; break
+        elif [ "$here" == "/" ]; then
+            >&2 echo "you're not under your home directory - exiting"; exit 1
+        else
+            cd ..
+        fi
+    done
+    popd >& /dev/null
 }
 
 ####################
@@ -43,9 +113,11 @@ global_options="--NotebookApp.iopub_data_rate_limit=10000000000"
 # does not check for another running instance
 function start-jupyter() {
     cd $ROOT
+    verbose "Starting jupyter in $(pwd)"
     verbose "start-jupyter"
     local token=$(echo $RANDOM-$RANDOM)
     local port=$(get-free-port)
+    verbose "Using free port $port"
     local command="nohup jupyter notebook --port $port --no-browser --NotebookApp.token=\"$token\" $global_options"
     verbose "starting $command"
     $command < /dev/null 2> $HKP/log &
@@ -72,97 +144,127 @@ function kill-jupyter() {
 }
 
 function list-jupyter() {
-    pids=$(pgrep -f jupyter)
-    if [ -z "$pids" ]; then
-	echo no running jupyter
+    local pid=$(cat $HKP/pid)
+    if [ -z "$pid" ]; then
+        echo "No jupyter running in dir $ROOT"
     else
-	ps $pids
+        ps $pid
     fi
-}
-####################
-function relative-path() {
-    path=$1; shift
-    local abs_root=$(cd $ROOT; pwd -P)
-    if [ -d $path ]; then
-	local abs_path=$(cd $path; pwd -P)
-    else
-	local filename=$(basename $path)
-	local abs_file_dir=$(cd $(dirname $path); pwd -P)
-	local abs_path=$abs_file_dir/$filename
-    fi
-    echo $abs_path | sed -e "s,$abs_root,,"
 }
 
+function list-all-jupyters() {
+    echo "============================== "
+    local tmpjson=/tmp/$$.json
+    jupyter notebook list --json > $tmpjson
+    python3 << EOF
+import json
+with open("$tmpjson") as feed:
+    records = [json.loads(line) for line in feed]
+if not records:
+    print("No jupyter notebook server running")
+else:
+    for record in records:
+        print(f"{record['notebook_dir']}: pid={record['pid']} - port={record['pid']}")
+EOF
+    echo "============================== "
+    pids=$(pgrep -f jupyter)
+    [ -n "$pids" ] && ps $pids
+}
+
+
 function open-notebooks() {
-    local notebook
-    local port=$(cat $HKP/port)
-    local token=$(cat $HKP/token)
     if [[ -z "$@" ]]; then
-	args="."
+        args="."
     else
-	args="$@"
+        args="$@"
     fi
+
+    local notebook
     for notebook in $args; do
-	local path=""
-	local _path; for _path in "$notebook" "$notebook".ipynb; do
-	    verbose "Trying file $_path"
-	    [ -e $_path ] && { path=$_path; break; }
-	    verbose nope
-	done
-	if [ -z "$path" ]; then
-	    echo "Cannot spot notebook $notebook - ignored" >& 2
-	    continue
-	fi
-	local url
-	if [ -d "$path" ]; then
-	    url="http://localhost:$port/tree$(relative-path $path)"
-	else
-	    url="http://localhost:$port/notebooks$(relative-path $path)"
-	fi
-	url="$url?token=$token"
-	verbose "opening url $url"
-	open $url
+        verbose ddealing with notebook $notebook
+        local path=""
+        local _path; for _path in "$notebook".ipynb "$notebook"; do
+            verbose "Trying file $_path"
+            [ -e $_path ] && { path=$_path; break; }
+            verbose nope
+        done
+        if [ -z "$path" ]; then
+            echo "Cannot spot notebook $notebook - ignored" >& 2
+            continue
+        fi
+        verbose path=$path
+
+        [ -n "venv_mode" ] && locate-root $path
+        verbose ROOT=$ROOT
+        # when using virtual envs, we may have to talk to
+        # several jupyter servers
+        running-or-start-jupyter
+        local port=$(cat $HKP/port)
+        local token=$(cat $HKP/token)
+        verbose server started
+
+        local url
+        if [ -d "$path" ]; then
+            url="http://localhost:$port/tree$(relative-path $path)"
+        else
+            url="http://localhost:$port/notebooks$(relative-path $path)"
+        fi
+        url="$url?token=$token"
+        verbose "opening url $url"
+        open $url
     done
 }
 
-USAGE="Usage: $COMMAND [-l] [-k]
-   or: $COMMAND [-r root] [notebooks or dirs]
+USAGE="Usage: $COMMAND [options] [-l] [-a] [-k]
+   or: $COMMAND [options] [notebooks or dirs]
 Modes:
-  -l: list running jupyters (default if commmand contains 'list')
-  -k: kill jupyters (default if command contains 'kill')
-  none: open notebook(s) or directory in browser
+  -l: list running jupyter in this dir (default if commmand contains 'list')
+  -a: list all running jupyters (default if command contains 'all')
+  -k: kill jupyter (default if command contains 'kill')
+  otherwise: open notebook(s) or directory in browser
 Options:
+  -e: use virtualenvs as found along path searching for $VENV_PATTERN
+      (default if command contains 'venv')
   -r root: select an alternative root (default is $HOME)
 "
 
 function main() {
-    while getopts "klr:v" opt; do
-	case $opt in
-	    k) kill_mode=true;;
-	    l) list_mode=true;;
-	    r) ROOT="$OPTARG"; HKP=$ROOT/.macnb ;;
-	    v) VERBOSE=true;;
+    while getopts "klaer:v" opt; do
+        case $opt in
+            k) ACTION=kill;;
+            l) ACTION=list;;
+            a) ACTION=list_all;;
+            e) venv_mode=true;;
+            r) option_root=$OPTARG;;
+            v) VERBOSE=true;;
             \?) >&2 printf "$USAGE" ; exit 1;;
         esac
     done
     shift $(($OPTIND - 1))
 
-    verbose "Managing jupyter server in $ROOT"
-    [ -d $HKP ] || mkdir $HKP
-
-    if [ -n "$kill_mode" ]; then
-	kill-jupyter
-    elif [ -n "$list_mode" ]; then
-	list-jupyter
+    # compute ROOT according to context and options
+    if [ -n "venv_mode" ] ; then
+        locate-root
+    elif [ -n "option_root"]; then
+        set-root $option_root
     else
-	running-or-start-jupyter
-	open-notebooks "$@"
+        set-root $HOME
     fi
+
+    verbose "Managing jupyter server in $ROOT"
+
+    case "$ACTION" in
+        kill) kill-jupyter;;
+        list) list-jupyter;;
+        list_all) list-all-jupyters;;
+        *) open-notebooks "$@";;
+    esac
 }
 
-case "$COMMAND" in
-    *kill*) kill_mode=true;;
-    *list*) list_mode=true;;
-esac
+# get implicit options from the command name - allows to use symlinks
+[[ "$COMMAND" =~ .*kill.* ]] && ACTION=kill
+[[ "$COMMAND" =~ .*list.* ]] && ACTION=list
+[[ "$COMMAND" =~ .*all.* ]] && ACTION=list_all
+[[ "$COMMAND" =~ .*venv.* ]] && venv_mode=true
 
 main "$@"
