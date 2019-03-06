@@ -1,6 +1,18 @@
 #!/bin/bash
 # -*- shell-script -*-
 
+#
+# opening notebooks from the finder, or the command line
+#
+# . runs notebook server when needed
+# . can be used to list or kill that process
+# . when used in virtualenv mode, is able to find most suitable
+#   virtualenv by walking up the notebook path and looking
+#   for a directory named 'venv'
+# . will export JUPYTER_CONFIG_DIR to venv/dot-jupyter
+#   if that can be found
+#
+
 COMMAND=$(basename $0)
 ROOT=$HOME
 # some regexp to find virtualenvs
@@ -8,14 +20,19 @@ VENV_PATTERN="venv"
 # stands for housekeeping
 HKP=$ROOT/.macnb
 
+
 #################### helpers
 # turn on with -v
 VERBOSE=
 ACTION=open
 
+function echo-stderr() {
+    echo >&2 "$@"
+}
+
 function verbose() {
     [ -z "$VERBOSE" ] && return
-    echo >&2 "$@"
+    echo-stderr "$@"
 }
 
 
@@ -61,7 +78,7 @@ function locate-root() {
     local wherefrom=$1; shift
     [ -z "$wherefrom" ] && wherefrom=$(pwd -P)
     [ -d "$wherefrom" ] || wherefrom=$(dirname $wherefrom)
-    [ -d "$wherefrom" ] || { 2>& echo "can't locate root from $wherefrom"; exit 1;}
+    [ -d "$wherefrom" ] || { echo-stderr "can't locate root from $wherefrom"; exit 1;}
 
     # where to stop
     local canonical_home=$(cd; pwd -P)
@@ -72,20 +89,22 @@ function locate-root() {
         ls -d $here/${VENV_PATTERN}/bin/activate >& /dev/null
         if [ "$?" == "0" ] ; then
             local activator=$(ls $here/${VENV_PATTERN}/bin/activate | head -1)
-            local topdir=$(dirname $(dirname $activator))
-            if [ ! -f $topdir/bin/jupyter ]; then
+            local venvdir=$(dirname $(dirname $activator))
+            if [ ! -f $venvdir/bin/jupyter ]; then
+                echo-stderr "Warning: ignoring virtualenv $venvdir that has no jupyter installed"
                 cd ..
                 continue
             fi
             source $activator
             verbose "Running in virtual env $activator"
-            topdir=$(dirname $topdir)
+            topdir=$(dirname $venvdir)
             set-root $topdir
             break
         elif [ "$here" == "$canonical_home" ]; then
             verbose "Deactivating just in case"
             deactivate >& /dev/null
-            set-root $here; break
+            set-root $here
+            break
         elif [ "$here" == "/" ]; then
             >&2 echo "you're not under your home directory - exiting"; exit 1
         else
@@ -187,7 +206,7 @@ function list-jupyter() {
 function open-notebooks() {
     local notebook
     for notebook in "$@"; do
-        verbose ddealing with notebook $notebook
+        verbose dealing with notebook $notebook
         local path=""
         local _path; for _path in "$notebook".ipynb "$notebook"; do
             verbose "Trying file $_path"
@@ -201,7 +220,6 @@ function open-notebooks() {
         verbose path=$path
 
         [ -n "venv_mode" ] && locate-root $path
-        verbose ROOT=$ROOT
         # when using virtual envs, we may have to talk to
         # several jupyter servers
         running-or-start-jupyter
