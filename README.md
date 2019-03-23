@@ -4,11 +4,45 @@
 
 This repo contains a utility to ease the workflow of opening jupyter notebooks on a macOS box.
 
-In a nutshell, you can open any notebook (or directory) under your home directory, in a jupyter classic notebook, from the command line; the tool will spawn a jupyter server as needed.
+In a nutshell, the purpose is to
 
-When requested to, the tool has a feature to run jupyter servers in virtualenvs, if it can find such virtualenvs along the way from a notebook up to your home directory. See below for details.
+* be able to open any notebook (or directory) under your home directory, in a jupyter classic notebook, from the command line; the tool will spawn a jupyter server as needed;
+* with a little more care, be able to double click on a notebook to achieve the same result.
 
-**NOTE:** as of now, installation is not automated.
+## virtualenvs
+
+The tool has a builtin feature for dealing with virtualenvs. The challenge here
+is that when you double click on a notebook in your finder, there is no way you
+can describe in what virtualenv you want this to happen.
+
+So our approach relies on the following convention:
+
+* create virtualenvs in directories named `venv`
+* these should be placed right under the directory where the virtualenv applies
+
+### Example
+
+![](doc/example.png)
+
+With the filesystem layout depicted above:
+
+* clicking on `rise/notebooks/slide.ipynb` will end up running in the `rise/venv` virtualenv
+* same for `specific/notebooks/notebook.ipynb`, running inside `specific/venv`
+* however `usual/notebooks/regular.ipynb` will execute in the globally installed python/jupyter setup, assuming that no `venv` directory can be found on the way up to the root directory.
+
+### Expectations, and convention about `nbextensions`
+
+There are a few additional assumptions made by the system:
+
+* when a `venv` directory is found, it must also - of course - have `jupyter` installed locally; a warning is issued otherwise and the virtualenv is skipped
+* when no suitable `venv` can be found, then the notebook is opened inside the globally-installed jupyter/python context
+* in addition, there is a more subtle point about `nbextensions`</br>
+  the point here is about whether or not extensions should be shared among the various jupyter installations
+  the adopted convention is that, if `venv` contains a subdirectory named `jupyter/nbextensions` then this one will be defined as `JUPYTER_DATA_DIR`, meaning that it is where jupyter nbextensions are searched for.
+
+
+**NOTE:** as of now, installation is **not** automated, follow instruction
+*below.
 
 ## Usage
 
@@ -18,13 +52,8 @@ Once installed (see below), from a terminal you just run:
 * `macnb-open mynotebook.ipynb` to open a notebook
 * `macnb-open nb1 nb2.ipynb` to open several notebooks
 * `macnb-all` displays all jupyter servers running on that box
-* `macnb-list` displays the jupyter server, if running
-* `macnb-kill` allows to kill the server
-
-## Usage with virtualenvs
-
-3 commands also exist in a `-venv` form, which triggers spotting virtualenv as
-described below. So e.g. `macnb-open-venv` is equivalent to `macnb-open -e`, and same with the `list` and `kill` forms.
+* `macnb-list` displays the jupyter server for local virtualenv, if running
+* `macnb-kill` allows to kill that server
 
 ## Installation
 
@@ -33,9 +62,9 @@ You need to create symlinks in your `PATH`; for example (tweak according to your
 ```
 cd ~/git
 git clone https://github.com/parmentelat/mac-notebook.git
+ln -sf ~/git/mac-notebook/bin/macnb-bashrc /usr/local/bin
 for name in macnb-open macnb-list macnb-all macnb-kill; do
     sudo ln -sf ~/git/mac-notebook/bin/macnb /usr/local/bin/$name
-    sudo ln -sf ~/git/mac-notebook/bin/macnb /usr/local/bin/$name-venv
 done
 ```
 
@@ -79,52 +108,3 @@ cp ~/git/mac-notebook/mac-notebook.icns /Applications/mac-notebook.app/Contents/
 * from icon/jupyter-logo-transparent.png, extract a square portion
 * create the 10 variants of sizes in `icon.iconset` with these exact names
 * run `iconutil --convert icns -o mac-notebook.icns icon.iconset/`
-
-
-## Context for the Jupyter server
-
-The main principle behind `mac-notebook` is to spawn a Jupyter server on a
-need-by-need basis. Each time a notebook is opened, a Jupyter server is
-searched, and if none is found, one is spawned.
-
-The actual context (virtualenv) used for spawning that server is thus primarily
-the one that runs the first `macnb-open` after you log in, or after you
-explicitly kill that server using macbn-kill.
-
-## Virtualenvs
-
-When enabled (i.e. when running with the -e option, or if the command name contains `venv`), `mac-notebook` uses virtualenvs as follows:
-
-#### When opening
-
-* starting from one notebook full path, we go up the filesystem tree up to '/'
-* on the way up, we check whether we can find a `venv` subdir, that in turn looks like a jupyter-enabled virtualenv, i.e. that has a `bin/activate` and `bin/jupyter`
-* if that's the case, then this is taken as the root for all notebooks underneath
-* otherwise we move up to $HOME, and run all the notebooks underneath under the system jupyter.
-
-
-Example:
-
-With this imaginary filesystem layout:
-
-```
-/Users/dilbert/
-  git/
-    proj1/
-      venv/
-        bin/
-          activate
-          jupyter
-      src/
-        foo.ipynb
-    proj2/
-      src/
-        bar.ipynb
-```
-
-* clicking on `foo.ipynb`, a jupyter server is launched in directory `/Users/dilbert/ git/ proj1/` inside a jupyter server running in the `git/proj1/venv` virtualenv;
-* clicking on `bar.ipynb` results in a jupyter server being launched in directory `/Users/dilbert` using the system-wide jupyter installation.
-
-#### Other actions
-
-When listing or killing servers, the current directory is used, with the same algorithm, to spot or kill a given server.

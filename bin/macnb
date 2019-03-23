@@ -1,49 +1,51 @@
 #!/bin/bash
 # -*- shell-script -*-
+#
+# some functions are defined in a separate module that can be
+# helpful for writing bash preludes
+
+source $(dirname $BASH_SOURCE)/macnb-bashrc
 
 #
 # opening notebooks from the finder, or the command line
 #
-# . runs notebook server when needed
-# . can be used to list or kill that process
-# . when used in virtualenv mode, is able to find most suitable
-#   virtualenv by walking up the notebook path and looking
-#   for a directory named 'venv'
-# . will export JUPYTER_CONFIG_DIR to venv/dot-jupyter
-#   if that can be found
+# . default mode (open): runs notebook server when needed
 #
+# . other modes (list, kill and all) to list or kill these processes
+#
+# . is able to find most suitable a virtualenv
+#   by walking up the notebook path and looking
+#   for a directory named 'venv'
+# . if these locations can be found, they will be used as:
+#   venv/jupyter/config: JUPYTER_CONFIG_DIR
+#   venv/jupyter/nbextensions: JUPYTER_DATA_DIR
+
 
 COMMAND=$(basename $0)
-ROOT=$HOME
 # some regexp to find virtualenvs
 VENV_PATTERN="venv"
-# stands for housekeeping
-HKP=$ROOT/.macnb
 
 
-#################### helpers
-# turn on with -v
-VERBOSE=
+### globals
+# change with options or using a symlink
 ACTION=open
+# change with -v option
+VERBOSE=
+# change with -r option
+OPTION_ROOT=
 
-function echo-stderr() {
-    echo >&2 "$@"
-}
-
+### helpers
 function verbose() {
     [ -z "$VERBOSE" ] && return
     echo-stderr "$@"
 }
 
-
-function set-root() {
-    local newroot="$1"
-    ROOT=$newroot
-    verbose "Using as ROOT $ROOT"
-    HKP=$ROOT/.macnb
-    [ -d $HKP ] || mkdir $HKP
+# the place to store state like tokens and logs and the like
+function housekeeping() {
+    local hkp=$MACNB_ROOT/.macnb
+    [ -d $hkp ] || mkdir $hkp
+    echo $hkp
 }
-
 
 function get-free-port() {
     python3 << EOF
@@ -57,9 +59,11 @@ EOF
 }
 
 
+# we need this top open a notebook relative to the jupyter server
 function relative-path() {
-    path=$1; shift
-    local abs_root=$(cd $ROOT; pwd -P)
+    local root=$1; shift
+    local path=$1; shift
+    local abs_root=$(cd $root; pwd -P)
     if [ -d $path ]; then
         local abs_path=$(cd $path; pwd -P)
     else
@@ -72,47 +76,10 @@ function relative-path() {
 
 
 ####################
-function locate-root() {
-    # open mode will pass us notebook paths
-    # other functions don't pass us anything
-    local wherefrom=$1; shift
-    [ -z "$wherefrom" ] && wherefrom=$(pwd -P)
-    [ -d "$wherefrom" ] || wherefrom=$(dirname $wherefrom)
-    [ -d "$wherefrom" ] || { echo-stderr "can't locate root from $wherefrom"; exit 1;}
-
-    # where to stop
-    local canonical_home=$(cd; pwd -P)
-    pushd $wherefrom >& /dev/null
-    while true; do
-        local here=$(pwd -P)
-        # check if we can find a virtualenv
-        ls -d $here/${VENV_PATTERN}/bin/activate >& /dev/null
-        if [ "$?" == "0" ] ; then
-            local activator=$(ls $here/${VENV_PATTERN}/bin/activate | head -1)
-            local venvdir=$(dirname $(dirname $activator))
-            if [ ! -f $venvdir/bin/jupyter ]; then
-                echo-stderr "Warning: ignoring virtualenv $venvdir that has no jupyter installed"
-                cd ..
-                continue
-            fi
-            source $activator
-            verbose "Running in virtual env $activator"
-            topdir=$(dirname $venvdir)
-            set-root $topdir
-            break
-        elif [ "$here" == "$canonical_home" ]; then
-            verbose "Deactivating just in case"
-            deactivate >& /dev/null
-            set-root $here
-            break
-        elif [ "$here" == "/" ]; then
-            >&2 echo "you're not under your home directory - exiting"; exit 1
-        else
-            cd ..
-        fi
-    done
-    popd >& /dev/null
-}
+# to trash...
+# previous locate-root was doing:
+# source $activator or deactivate
+# and set-root
 
 ####################
 function list-all-jupyters() {
@@ -127,7 +94,7 @@ if not records:
     print("No jupyter notebook server running")
 else:
     for record in records:
-        print(f"{record['notebook_dir']}: pid={record['pid']} - port={record['pid']}")
+        print(f"{record['notebook_dir']}: pid={record['pid']} - port={record['port']}")
 EOF
     echo "============================== "
     pids=$(pgrep -f jupyter)
@@ -139,7 +106,8 @@ EOF
 # or 1 if true (the pid as recorded in our pid file is up and running)
 function running-jupyter() {
     verbose "running-jupyter"
-    local recorded_pid=$(cat $HKP/pid 2> /dev/null)
+    local hkp=$(housekeeping)
+    local recorded_pid=$(cat $hkp/pid 2> /dev/null)
     # return false if not found
     [ -z "$recorded_pid" ] && return 1
     # return false if process is not alive
@@ -150,22 +118,23 @@ function running-jupyter() {
 }
 
 
-global_options="--NotebookApp.iopub_data_rate_limit=10000000000"
+GLOBAL_OPTIONS="--NotebookApp.iopub_data_rate_limit=10000000000"
 
 # does not check for another running instance
 function start-jupyter() {
-    cd $ROOT
+    cd $MACNB_ROOT
     verbose "Starting jupyter in $(pwd)"
     verbose "start-jupyter"
     local token=$(echo $RANDOM-$RANDOM)
     local port=$(get-free-port)
     verbose "Using free port $port"
-    local command="nohup jupyter notebook --port $port --no-browser --NotebookApp.token=\"$token\" $global_options"
+    local command="nohup jupyter notebook --port $port --no-browser --NotebookApp.token=\"$token\" $GLOBAL_OPTIONS"
     verbose "starting $command"
-    $command < /dev/null 2> $HKP/log &
-    echo $! > $HKP/pid
-    echo $token > $HKP/token
-    echo $port > $HKP/port
+    local hkp=$(housekeeping)
+    $command < /dev/null 2> $hkp/log &
+    echo $! > $hkp/pid
+    echo $token > $hkp/token
+    echo $port > $hkp/port
     cd - >& /dev/null
 }
 
@@ -178,25 +147,32 @@ function running-or-start-jupyter() {
 function kill-jupyter() {
     local notebook
     for notebook in "$@"; do
-        locate-root $notebook
-        verbose "kill-jupyter"
-        local recorded_pid=$(cat $HKP/pid 2> /dev/null)
+        verbose "kill-jupyter on $notebook"
+        local init=$(macnb-find-enclosing $notebook)
+        eval $init
+        local hkp=$(housekeeping)
+        local recorded_pid=$(cat $hkp/pid 2> /dev/null)
         # return false if not found
-        [ -z "$recorded_pid" ] && { verbose "pid not found from $HKP/pid" ; return 1; }
+        [ -z "$recorded_pid" ] && { verbose "pid not found from $hkp/pid" ; return 1; }
         verbose "killing pid $pid"
         kill $recorded_pid
-        rm $HKP/pid $HKP/port $HKP/token
+        rm $hkp/pid $hkp/port $hkp/token
     done
 }
 
 function list-jupyter() {
     local notebook
     for notebook in "$@"; do
-        locate-root $notebook
-        verbose "for $notebook: listing in $ROOT"
-        local pid=$(cat $HKP/pid 2> /dev/null)
+        local init=$(macnb-find-enclosing -p "$VENV_PATTERN" $notebook) || {
+            echo could not find enclosing venv with $notebook
+            continue
+        }
+        eval $init
+        local hkp=$(housekeeping)
+        verbose "for $notebook: listing in $MACNB_ROOT"
+        local pid=$(cat $hkp/pid 2> /dev/null)
         if [ -z "$pid" ]; then
-            echo "No jupyter running in dir $ROOT"
+            echo "No jupyter running in dir $MACNB_ROOT"
         else
             ps $pid
         fi
@@ -218,20 +194,29 @@ function open-notebooks() {
             continue
         fi
         verbose path=$path
+        local init=$(macnb-find-enclosing $path)
+        if [ $? -eq 0 ]; then
+            eval $init
+            source $ACTIVATOR
+            export JUPYTER_CONFIG
+            export JUPYTER_DATA
+        else
+            # no virtualenv
+            type deactivate && deactivate
+            eval $init
+        fi
 
-        [ -n "venv_mode" ] && locate-root $path
-        # when using virtual envs, we may have to talk to
-        # several jupyter servers
+        # at this point MACNB_ROOT is set
         running-or-start-jupyter
-        local port=$(cat $HKP/port)
-        local token=$(cat $HKP/token)
-        verbose server started
+        local hkp=$(housekeeping)
+        local port=$(cat $hkp/port)
+        local token=$(cat $hkp/token)
 
         local url
         if [ -d "$path" ]; then
-            url="http://localhost:$port/tree$(relative-path $path)"
+            url="http://localhost:$port/tree$(relative-path $MACNB_ROOT $path)"
         else
-            url="http://localhost:$port/notebooks$(relative-path $path)"
+            url="http://localhost:$port/notebooks$(relative-path $MACNB_ROOT $path)"
         fi
         url="$url?token=$token"
         verbose "opening url $url"
@@ -253,29 +238,19 @@ Options:
 "
 
 function main() {
-    while getopts "klaer:v" opt; do
+    local OPTIND
+    local OPTARG
+    while getopts "klar:v" opt; do
         case $opt in
             k) ACTION=kill;;
             l) ACTION=list;;
             a) ACTION=list_all;;
-            e) venv_mode=true;;
             r) option_root=$OPTARG;;
             v) VERBOSE=true;;
             \?) >&2 printf "$USAGE" ; exit 1;;
         esac
     done
     shift $(($OPTIND - 1))
-
-    # compute ROOT according to context and options
-    if [ -n "venv_mode" ] ; then
-        locate-root
-    elif [ -n "option_root"]; then
-        set-root $option_root
-    else
-        set-root $HOME
-    fi
-
-    verbose "Managing jupyter server in $ROOT"
 
     local args
     if [[ -z "$@" ]]; then
@@ -296,6 +271,5 @@ function main() {
 [[ "$COMMAND" =~ .*kill.* ]] && ACTION=kill
 [[ "$COMMAND" =~ .*list.* ]] && ACTION=list
 [[ "$COMMAND" =~ .*all.* ]] && ACTION=list_all
-[[ "$COMMAND" =~ .*venv.* ]] && venv_mode=true
 
 main "$@"

@@ -1,0 +1,113 @@
+#!/bin/bash
+# -*- shell-script -*-
+#
+# mac-notebook utilities
+#
+
+
+function echo-stderr() {
+    echo >&2 "$@"
+}
+
+### macnb-find-enclosing()
+#
+# PURPOSE
+# expects zero or one argument, existing file or dir (or pwd)
+#
+# starting from that location and walking up the filesystem tree,
+# looks for a 'venv' subdir that looks like a virtualenv
+# with jupyter installed
+#
+# OPTIONS
+# -j: default is to also check for the existence of a jupyter command
+# in that virtualenv; this can be turned off by passing the -j option
+#
+# -v: also the default for the virtualenv name is 'venv' override with -v
+# which can be a shell pattern
+#
+# RESULT
+# writes on stdout a string that can be eval'ed,
+# and that defines the following variables
+# MACNB_ROOT the location that will be the working dir for jupyter
+#            i.e. the parent of the virtualenv, or $HOME
+# ACTIVATOR points at the activate script for the virtualenv
+#           may be empty if none applies
+# JUPYTER_DATA_DIR if this needs to be overridden in child processes
+#           this value depends on the existence of jupyter/nbextensions under
+#           the virtualenv directory
+# JUPYTER_CONFIG if this needs to be overridden
+#           same but checks for jupyter/config under venv
+#
+# RETCOD
+# 0 if a virtualenv was found
+# 1 otherwise
+
+function macnb-find-enclosing() {
+    local OPTIND
+    local OPTARG
+    local USAGE="Usage: $FUNCNAME [-j] [-v venv-pattern] [startpoint]"
+    local check_for_jupyter_bin=true
+    local venv_pattern=venv
+    local retcod=1
+    # Get options
+    while getopts "p:jhv" opt ; do
+        case $opt in
+            p) venv_pattern=$OPTARG ;;
+            j) check_for_jupyter_bin="" ;;
+            v) set -x ;;
+            h) echo-stderr $USAGE; return 1 ;;
+        esac
+    done
+
+    shift $(($OPTIND - 1))
+
+    # did we receive a filename to start from ?
+    local start="$1"; shift
+    # no argument: start from current directory
+    [ -z "$start" ] && start=$(pwd)
+
+    [[ -n "$@" ]] && { echo-stderr $USAGE; return 1; }
+
+    # where to stop
+    local home=$(cd; pwd -P)
+    # raincheck
+    [ -e "$start" ] || { echo-stderr "No such file $start"; return 1; }
+    [ -d "$start" ] || start=$(dirname $start)
+    # walk upstairs until found
+    pushd $start >& /dev/null
+    while true; do
+        local here=$(pwd -P)
+        if [ -f $venv_pattern/bin/activate ]; then
+            local venv_path=$(ls -d $(pwd)/$venv_pattern)
+            if [ -n "$check_for_jupyter_bin" -a ! -f $venv_path/bin/jupyter ]; then
+                echo-stderr "WARNING: found $venv_path no local jupyter installed - skipping"
+                cd ..
+                continue
+            fi
+            echo MACNB_ROOT=\"$(pwd -P)\"
+            echo ACTIVATOR=\"${venv_path}/bin/activate\"
+            if [ -d ${venv_path}/jupyter/nbextensions ]; then
+                echo JUPYTER_DATA_DIR=\"${venv_path}/jupyter/nbextensions\"
+            else
+                echo JUPYTER_CONFIG=
+            fi
+            if [ -d ${venv_path}/jupyter/config ]; then
+                echo JUPYTER_CONFIG=\"${venv_path}/jupyter/config\"
+            else
+                echo JUPYTER_CONFIG=
+            fi
+            retcod=0
+            break
+        elif [ "$here" == $HOME -o "$here" == "/" ]; then
+            echo MACNB_ROOT=$HOME
+            echo ACTIVATOR=
+            echo JUPYTER_DATA_DIR=
+            echo JUPYTER_CONFIG=
+            break
+        else
+            cd ..
+        fi
+    done
+    popd >& /dev/null
+    return $retcod
+}
