@@ -195,14 +195,14 @@ function open-notebooks() {
         fi
         verbose path=$path
         local init=$(macnb-find-enclosing $path)
-        if [ $? -eq 0 ]; then
+        if [ -n "$ACTIVATOR" ]; then
             eval $init
             source $ACTIVATOR
             export JUPYTER_CONFIG
             export JUPYTER_DATA
         else
             # no virtualenv
-            type deactivate && deactivate
+            type deactivate >& /dev/null && deactivate
             eval $init
         fi
 
