@@ -87,22 +87,22 @@ function macnb-find-enclosing() {
             echo MACNB_ROOT=\"$(pwd -P)\"
             echo ACTIVATOR=\"${venv_path}/bin/activate\"
             if [ -d ${venv_path}/jupyter/nbextensions ]; then
-                echo JUPYTER_DATA_DIR=\"${venv_path}/jupyter/nbextensions\"
+                echo export JUPYTER_DATA_DIR=\"${venv_path}/jupyter/nbextensions\"
             else
-                echo JUPYTER_CONFIG=
+                echo export JUPYTER_CONFIG=
             fi
             if [ -d ${venv_path}/jupyter/config ]; then
-                echo JUPYTER_CONFIG=\"${venv_path}/jupyter/config\"
+                echo export JUPYTER_CONFIG=\"${venv_path}/jupyter/config\"
             else
-                echo JUPYTER_CONFIG=
+                echo export JUPYTER_CONFIG=
             fi
             retcod=0
             break
         elif [ "$here" == $HOME -o "$here" == "/" ]; then
             echo MACNB_ROOT=$HOME
             echo ACTIVATOR=
-            echo JUPYTER_DATA_DIR=
-            echo JUPYTER_CONFIG=
+            echo export JUPYTER_DATA_DIR=
+            echo export JUPYTER_CONFIG=
             break
         else
             cd ..
