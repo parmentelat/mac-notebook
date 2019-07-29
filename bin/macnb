@@ -6,6 +6,8 @@
 
 source $(dirname $BASH_SOURCE)/macnb-bashrc
 
+eval "$(conda shell.bash hook)"
+
 #
 # opening notebooks from the finder, or the command line
 #
@@ -22,8 +24,6 @@ source $(dirname $BASH_SOURCE)/macnb-bashrc
 
 
 COMMAND=$(basename $0)
-# some regexp to find virtualenvs
-VENV_PATTERN="venv"
 
 
 ### globals
@@ -31,8 +31,9 @@ VENV_PATTERN="venv"
 ACTION=open
 # change with -v option
 VERBOSE=
-# change with -r option
-OPTION_ROOT=
+
+# global used internally
+MACNB_ROOT=""
 
 ### helpers
 function verbose() {
@@ -148,8 +149,10 @@ function kill-jupyter() {
     local notebook
     for notebook in "$@"; do
         verbose "kill-jupyter on $notebook"
-        local init=$(macnb-find-enclosing $notebook)
-        eval $init
+        local root_conda=$(macnb-find-enclosing-miniconda $notebook)
+        MACNB_ROOT=$(cut -f 1 -d ' ' <<< $root_conda)
+        local conda=$(cut -f 2 -d ' ' <<< $root_conda)
+        conda activate $conda
         local hkp=$(housekeeping)
         local recorded_pid=$(cat $hkp/pid 2> /dev/null)
         # return false if not found
@@ -163,11 +166,10 @@ function kill-jupyter() {
 function list-jupyter() {
     local notebook
     for notebook in "$@"; do
-        local init=$(macnb-find-enclosing -p "$VENV_PATTERN" $notebook) || {
-            echo could not find enclosing venv with $notebook
-            continue
-        }
-        eval $init
+        local root_conda=$(macnb-find-enclosing-miniconda $notebook)
+        MACNB_ROOT=$(cut -f 1 -d ' ' <<< $root_conda)
+        local conda=$(cut -f 2 -d ' ' <<< $root_conda)
+        conda activate $conda
         local hkp=$(housekeeping)
         verbose "for $notebook: listing in $MACNB_ROOT"
         local pid=$(cat $hkp/pid 2> /dev/null)
@@ -194,17 +196,10 @@ function open-notebooks() {
             continue
         fi
         verbose path=$path
-        local init=$(macnb-find-enclosing $path)
-        if [ -n "$ACTIVATOR" ]; then
-            eval $init
-            source $ACTIVATOR
-            export JUPYTER_CONFIG
-            export JUPYTER_DATA
-        else
-            # no virtualenv
-            type deactivate >& /dev/null && deactivate
-            eval $init
-        fi
+        local root_conda=$(macnb-find-enclosing-miniconda $notebook)
+        MACNB_ROOT=$(cut -f 1 -d ' ' <<< $root_conda)
+        local conda=$(cut -f 2 -d ' ' <<< $root_conda)
+        conda activate $conda
 
         # at this point MACNB_ROOT is set
         running-or-start-jupyter
@@ -234,18 +229,16 @@ Modes:
 Options:
   -e: use virtualenvs as found along path searching for $VENV_PATTERN
       (default if command contains 'venv')
-  -r root: select an alternative root (default is $HOME)
 "
 
 function main() {
     local OPTIND
     local OPTARG
-    while getopts "klar:v" opt; do
+    while getopts "kla:v" opt; do
         case $opt in
             k) ACTION=kill;;
             l) ACTION=list;;
             a) ACTION=list_all;;
-            r) option_root=$OPTARG;;
             v) VERBOSE=true;;
             \?) >&2 printf "$USAGE" ; exit 1;;
         esac

@@ -9,50 +9,51 @@ function echo-stderr() {
     echo >&2 "$@"
 }
 
-### macnb-find-enclosing()
+### macnb-find-enclosing-miniconda()
 #
 # PURPOSE
 # expects zero or one argument, existing file or dir (or pwd)
 #
 # starting from that location and walking up the filesystem tree,
-# looks for a 'venv' subdir that looks like a virtualenv
-# with jupyter installed
+# looks for a conda environment with the same name 
+# (with jupyter installed unless -j is specified)
 #
 # OPTIONS
 # -j: default is to also check for the existence of a jupyter command
 # in that virtualenv; this can be turned off by passing the -j option
 #
-# -v: also the default for the virtualenv name is 'venv' override with -v
-# which can be a shell pattern
-#
 # RESULT
-# writes on stdout a string that can be eval'ed,
-# and that defines the following variables
-# MACNB_ROOT the location that will be the working dir for jupyter
-#            i.e. the parent of the virtualenv, or $HOME
-# ACTIVATOR points at the activate script for the virtualenv
-#           may be empty if none applies
-# JUPYTER_DATA_DIR if this needs to be overridden in child processes
-#           this value depends on the existence of jupyter/nbextensions under
-#           the virtualenv directory
-# JUPYTER_CONFIG if this needs to be overridden
-#           same but checks for jupyter/config under venv
+# writes on stdout a line with 2 tokens
+# rootdir condaname
+# if a match could be found, and 
+# homedir 'base' 
+# otherwise
 #
 # RETCOD
-# 0 if a virtualenv was found
+# 0 if a conda environment
 # 1 otherwise
+# 
+# EXAMPLE
+# starting from $HOME/git/flotpython/notebooks/foo.ipynb
+# will search for a conda env named foo.ipynb, notebooks, flotpython, git
+# if e.g. flotpython exists (read is the first to exist) then
+# the output is 
+# $HOME/git/flotpython flotpython
+# if none exists it outputs
+# $HOME base
 
-function macnb-find-enclosing() {
+
+CONDA_ENVS_DIR=$HOME/miniconda3/envs
+
+function macnb-find-enclosing-miniconda() {
     local OPTIND
     local OPTARG
-    local USAGE="Usage: $FUNCNAME [-j] [-v venv-pattern] [startpoint]"
+    local USAGE="Usage: $FUNCNAME [-j] [startpoint]"
     local check_for_jupyter_bin=true
-    local venv_pattern=venv
     local retcod=1
     # Get options
-    while getopts "p:jhv" opt ; do
+    while getopts "vjh" opt ; do
         case $opt in
-            p) venv_pattern=$OPTARG ;;
             j) check_for_jupyter_bin="" ;;
             v) set -x ;;
             h) echo-stderr $USAGE; return 1 ;;
@@ -77,33 +78,19 @@ function macnb-find-enclosing() {
     pushd $start >& /dev/null
     while true; do
         local here=$(pwd -P)
-        if [ -f $venv_pattern/bin/activate ]; then
-            local venv_path=$(ls -d $(pwd)/$venv_pattern)
+        local stem=$(basename $here)
+        local venv_path=$CONDA_ENVS_DIR/$stem
+        if [ -d $venv_path ]; then
             if [ -n "$check_for_jupyter_bin" -a ! -f $venv_path/bin/jupyter ]; then
                 echo-stderr "WARNING: found $venv_path no local jupyter installed - skipping"
                 cd ..
                 continue
             fi
-            echo MACNB_ROOT=\"$(pwd -P)\"
-            echo ACTIVATOR=\"${venv_path}/bin/activate\"
-            if [ -d ${venv_path}/jupyter/nbextensions ]; then
-                echo export JUPYTER_DATA_DIR=\"${venv_path}/jupyter/nbextensions\"
-            else
-                echo export JUPYTER_CONFIG=
-            fi
-            if [ -d ${venv_path}/jupyter/config ]; then
-                echo export JUPYTER_CONFIG=\"${venv_path}/jupyter/config\"
-            else
-                echo export JUPYTER_CONFIG=
-            fi
-            retcod=0
-            break
+            echo $here $stem
+            return 0
         elif [ "$here" == $HOME -o "$here" == "/" ]; then
-            echo MACNB_ROOT=$HOME
-            echo ACTIVATOR=
-            echo export JUPYTER_DATA_DIR=
-            echo export JUPYTER_CONFIG=
-            break
+            echo $HOME base
+            return 0
         else
             cd ..
         fi
@@ -111,3 +98,7 @@ function macnb-find-enclosing() {
     popd >& /dev/null
     return $retcod
 }
+
+
+
+
