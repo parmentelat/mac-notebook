@@ -7,39 +7,48 @@ This repo contains a utility to ease the workflow of opening jupyter notebooks o
 In a nutshell, the purpose is to
 
 * be able to open any notebook (or directory) under your home directory, in a jupyter classic notebook, from the command line; the tool will spawn a jupyter server as needed;
-* with a little more care, be able to double click on a notebook to achieve the same result.
+* with a little more care, be able to double click on a notebook to achieve the same result;
+* this all assumes you have a `base` conda env to use for all your notebooks; an implicit mapping is performed to find out a more relevant/specific conda env to use for notebooks in a given project.
 
-## virtualenvs
+## conda envs
 
-The tool has a builtin feature for dealing with virtualenvs. The challenge here
+The tool has a builtin feature for dealing with (mini)conda envs. The challenge here
 is that when you double click on a notebook in your finder, there is no way you
-can describe in what virtualenv you want this to happen.
+can describe in what conda env you want this to happen.
 
 So our approach relies on the following convention:
 
-* create virtualenvs in directories named `venv`
-* these should be placed right under the directory where the virtualenv applies
+* create conda envs that are named after a directory in the path to your notebooks
+* if such a conda env is found, use it, otherwise use `base` 
 
 ### Example
 
 ![](doc/example.png)
 
-With the filesystem layout depicted above:
+Assume the filesystem layout depicted above, and that you have 
 
-* clicking on `rise/notebooks/slide.ipynb` will end up running in the `rise/venv` virtualenv
-* same for `specific/notebooks/notebook.ipynb`, running inside `specific/venv`
-* however `usual/notebooks/regular.ipynb` will execute in the globally installed python/jupyter setup, assuming that no `venv` directory can be found on the way up to the root directory.
+```bash
+$ conda env list
+# conda environments:
+#
+base                     /Users/tparment/miniconda3
+flotpython-gittutorial  *  /Users/tparment/miniconda3/envs/flotpython-gittutorial
+flotpython-primer        /Users/tparment/miniconda3/envs/flotpython-primer
+nbhosting                /Users/tparment/miniconda3/envs/nbhosting
+r2lab-demos              /Users/tparment/miniconda3/envs/r2lab-demos
+```
+
+* then clicking in any notebook under `~/git/flotpython-tutorial` will run inside the `flotpython-tutorial` conda env, 
+* while any notebook under `~/git/nbautoeval` will end up running in the `base` conda env
+
 
 ### Expectations, and convention about `nbextensions`
 
 There are a few additional assumptions made by the system:
 
-* when a `venv` directory is found, it must also - of course - have `jupyter` installed locally; a warning is issued otherwise and the virtualenv is skipped
-* when no suitable `venv` can be found, then the notebook is opened inside the globally-installed jupyter/python context
-* in addition, there is a more subtle point about `nbextensions`</br>
-  the point here is about whether or not extensions should be shared among the various jupyter installations
-  the adopted convention is that, if `venv` contains a subdirectory named `jupyter/nbextensions` then this one will be defined as `JUPYTER_DATA_DIR`, meaning that it is where jupyter nbextensions are searched for.
-
+* when a conda env is found, it must also - of course - have `jupyter` installed locally; a warning is issued otherwise and this env is not used
+* when no suitable `venv` can be found, then the notebook is opened inside the `base` conda env; as of this writing this means that `mac-notebook` might not work without miniconda installed 
+* conda envs are searched in `~/miniconda3/envs` 
 
 **NOTE:** as of now, installation is **not** automated, follow instruction
 *below.
@@ -53,7 +62,7 @@ Once installed (see below), from a terminal you just run:
 * `macnb-open nb1 nb2.ipynb` to open several notebooks
 * `macnb-all` displays all jupyter servers running on that box
 * `macnb-list` displays the jupyter server for local virtualenv, if running
-* `macnb-kill` allows to kill that server
+* `macnb-kill` allows to kill that server; you may pass a filename that will be used to spot a specific jupyter server
 
 ## Installation
 
