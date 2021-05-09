@@ -15,7 +15,7 @@ function echo-stderr() {
 # expects zero or one argument, existing file or dir (or pwd)
 #
 # starting from that location and walking up the filesystem tree,
-# looks for a conda environment with the same name 
+# looks for a conda environment with the same name
 # (with jupyter installed unless -j is specified)
 #
 # OPTIONS
@@ -25,19 +25,19 @@ function echo-stderr() {
 # RESULT
 # writes on stdout a line with 2 tokens
 # rootdir condaname
-# if a match could be found, and 
-# homedir 'base' 
+# if a match could be found, and
+# homedir 'base'
 # otherwise
 #
 # RETCOD
 # 0 if a conda environment
 # 1 otherwise
-# 
+#
 # EXAMPLE
 # starting from $HOME/git/flotpython/notebooks/foo.ipynb
 # will search for a conda env named foo.ipynb, notebooks, flotpython, git
 # if e.g. flotpython exists (read is the first to exist) then
-# the output is 
+# the output is
 # $HOME/git/flotpython flotpython
 # if none exists it outputs
 # $HOME base
