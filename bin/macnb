@@ -215,7 +215,10 @@ function open-notebooks() {
         fi
         url="$url?token=$token"
         verbose "opening url $url"
-        open $url
+        # on linux: open is not available, but xdg-open is
+        local open_program=open
+        type xdg-open >& /dev/null && open_program=xdg-open
+        $open_program $url
     done
 }
 
