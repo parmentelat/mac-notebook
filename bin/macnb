@@ -15,12 +15,10 @@ eval "$(conda shell.bash hook)"
 #
 # . other modes (list, kill and all) to list or kill these processes
 #
-# . is able to find most suitable a virtualenv
+# . is able to find the most suitable virtualenv
 #   by walking up the notebook path and looking
-#   for a directory named 'venv'
-# . if these locations can be found, they will be used as:
-#   venv/jupyter/config: JUPYTER_CONFIG_DIR
-#   venv/jupyter/nbextensions: JUPYTER_DATA_DIR
+#   for a directory named exactly like a conda env
+# . if not found, runs in the 'base' conda env
 
 
 COMMAND=$(basename $0)
@@ -31,6 +29,8 @@ COMMAND=$(basename $0)
 ACTION=open
 # change with -v option
 VERBOSE=
+# change with -b option
+LAB=
 
 # global used internally
 MACNB_ROOT=""
@@ -207,11 +207,19 @@ function open-notebooks() {
         local port=$(cat $hkp/port)
         local token=$(cat $hkp/token)
 
-        local url
+        local url=
         if [ -d "$path" ]; then
-            url="http://localhost:$port/tree$(relative-path $MACNB_ROOT $path)"
+            if [ -z "$LAB" ]; then
+                url="http://localhost:$port/tree$(relative-path $MACNB_ROOT $path)"
+            else
+                url="http://localhost:$port/lab"
+            fi
         else
-            url="http://localhost:$port/notebooks$(relative-path $MACNB_ROOT $path)"
+            if [ -z "$LAB" ]; then
+                url="http://localhost:$port/notebooks$(relative-path $MACNB_ROOT $path)"
+            else
+                url="http://localhost:$port/lab/tree$(relative-path $MACNB_ROOT $path)"
+            fi
         fi
         url="$url?token=$token"
         verbose "opening url $url"
@@ -230,19 +238,20 @@ Modes:
   -k: kill jupyter (default if command contains 'kill')
   otherwise: open notebook(s) or directory in browser
 Options:
-  -e: use virtualenvs as found along path searching for $VENV_PATTERN
-      (default if command contains 'venv')
+  -v: verbose
+  -b: use jupyterlab
 "
 
 function main() {
     local OPTIND
     local OPTARG
-    while getopts "kla:v" opt; do
+    while getopts "klavb" opt; do
         case $opt in
             k) ACTION=kill;;
             l) ACTION=list;;
             a) ACTION=list_all;;
             v) VERBOSE=true;;
+            b) LAB=true;;
             \?) >&2 printf "$USAGE" ; exit 1;;
         esac
     done
