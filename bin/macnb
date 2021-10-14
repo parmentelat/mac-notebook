@@ -132,7 +132,7 @@ function start-jupyter() {
     local command="nohup jupyter notebook --port $port --no-browser --NotebookApp.token=\"$token\" $GLOBAL_OPTIONS"
     verbose "starting $command"
     local hkp=$(housekeeping)
-    $command < /dev/null 2> $hkp/log &
+    $command < /dev/null &> $hkp/log &
     echo $! > $hkp/pid
     echo $token > $hkp/token
     echo $port > $hkp/port
