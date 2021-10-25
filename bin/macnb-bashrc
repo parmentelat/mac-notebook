@@ -41,6 +41,24 @@ function echo-stderr() {
 # $HOME/git/flotpython flotpython
 # if none exists it outputs
 # $HOME base
+#
+#
+# ALIASES
+# when 2 folders share the same conda env, it is possible to
+# create some kind of aliasing by creating a file named
+# .macnb/alias
+# that contains the name of the conda env to use
+#
+# EXAMPLE
+# 2 foders named
+# $HOME/git/ue12-p21-python-numerique
+# $HOME/git/ue12-p21-python-numerique-private
+# and in that setup we have a conda env named ue12-p21-python-numerique
+# then we can create a file named
+# $HOME/git/ue12-p21-python-numerique-private/.macnb/alias
+# that contains ue12-p21-python-numerique
+# from that point on, macnb-find-enclosing-miniconda will output
+# $HOME/git/ue12-p21-python-numerique-private ue12-p21-python-numerique
 
 
 CONDA_ENVS_DIR=$HOME/miniconda3/envs
@@ -78,6 +96,19 @@ function macnb-find-enclosing-miniconda() {
     pushd $start >& /dev/null
     while true; do
         local here=$(pwd -P)
+        local alias=$here/.macnb/alias
+        if [ -f $alias ]; then
+            local stem=$(cat $alias)
+            local venv_path=$CONDA_ENVS_DIR/$stem
+            if [ ! -d $venv_path ]; then
+                echo-stderr "WARNING: alias $stem looks stale ! - skipping"
+            elif [ -n "$check_for_jupyter_bin" -a ! -f $venv_path/bin/jupyter ]; then
+                echo-stderr "WARNING: found alias $stem but no local jupyter installed - skipping"
+            else
+                echo $here $stem
+                return 0
+            fi
+        fi
         local stem=$(basename $here)
         local venv_path=$CONDA_ENVS_DIR/$stem
         if [ -d $venv_path ]; then
@@ -98,7 +129,3 @@ function macnb-find-enclosing-miniconda() {
     popd >& /dev/null
     return $retcod
 }
-
-
-
-

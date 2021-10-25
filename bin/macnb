@@ -60,7 +60,7 @@ EOF
 }
 
 
-# we need this top open a notebook relative to the jupyter server
+# we need this to open a notebook relative to the jupyter server
 function relative-path() {
     local root=$1; shift
     local path=$1; shift
@@ -181,6 +181,15 @@ function list-jupyter() {
     done
 }
 
+
+function print-env() {
+    # ignore args
+    local root_conda=$(macnb-find-enclosing-miniconda $notebook)
+    MACNB_ROOT=$(cut -f 1 -d ' ' <<< $root_conda)
+    local conda=$(cut -f 2 -d ' ' <<< $root_conda)
+    echo "Using conda env '$conda'" rooted at $MACNB_ROOT
+}
+
 function open-notebooks() {
     local notebook
     for notebook in "$@"; do
@@ -265,10 +274,11 @@ function main() {
     fi
 
     case "$ACTION" in
-        list_all) list-all-jupyters;;
         kill) kill-jupyter $args;;
         list) list-jupyter $args;;
-        *) open-notebooks  $args;;
+        list_all) list-all-jupyters;;
+        print_env) print-env $args;;
+        *) open-notebooks $args;;
     esac
 }
 
@@ -276,5 +286,6 @@ function main() {
 [[ "$COMMAND" =~ .*kill.* ]] && ACTION=kill
 [[ "$COMMAND" =~ .*list.* ]] && ACTION=list
 [[ "$COMMAND" =~ .*all.* ]] && ACTION=list_all
+[[ "$COMMAND" =~ .*env.* ]] && ACTION=print_env
 
 main "$@"
