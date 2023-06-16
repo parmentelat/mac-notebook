@@ -108,7 +108,7 @@ function running-jupyter() {
     # return false if process is not alive
     ps $recorded_pid >& /dev/null || return 1
     # return false if pid not found among meaningful processes
-    pgrep -f jupyter-notebook | grep --silent '^'"${recorded_pid}"'$' || return 1
+    pgrep -f jupyter | grep --silent '^'"${recorded_pid}"'$' || return 1
     return 0
 }
 
