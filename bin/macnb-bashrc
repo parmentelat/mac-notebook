@@ -36,7 +36,7 @@ function echo-stderr() {
 # EXAMPLE
 # starting from $HOME/git/flotpython/notebooks/foo.ipynb
 # will search for a conda env named foo.ipynb, notebooks, flotpython, git
-# if e.g. flotpython exists (read is the first to exist) then
+# if e.g. flotpython exists (and is the first to exist) then
 # the output is
 # $HOME/git/flotpython flotpython
 # if none exists it outputs

@@ -77,12 +77,6 @@ function relative-path() {
 
 
 ####################
-# to trash...
-# previous locate-root was doing:
-# source $activator or deactivate
-# and set-root
-
-####################
 function list-all-jupyters() {
     echo "============================== "
     local tmpjson=/tmp/$$.json
@@ -129,7 +123,7 @@ function start-jupyter() {
     local token=$(echo $RANDOM-$RANDOM)
     local port=$(get-free-port)
     verbose "Using free port $port"
-    local command="nohup jupyter notebook --port $port --no-browser --NotebookApp.token=\"$token\" $GLOBAL_OPTIONS"
+    local command="nohup jupyter lab --port $port --no-browser --NotebookApp.token=\"$token\" $GLOBAL_OPTIONS"
     verbose "starting $command"
     local hkp=$(housekeeping)
     $command < /dev/null &> $hkp/log &
