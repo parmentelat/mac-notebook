@@ -19,13 +19,13 @@ can describe in what conda env you want this to happen.
 So our approach relies on the following convention:
 
 * create conda envs that are named after a directory in the path to your notebooks
-* if such a conda env is found, use it, otherwise use `base` 
+* if such a conda env is found, use it, otherwise use `base`
 
 ### Example
 
-![](doc/example.png)
+![example](doc/example.png)
 
-Assume the filesystem layout depicted above, and that you have 
+Assume the filesystem layout depicted above, and that you have
 
 ```bash
 $ conda env list
@@ -38,17 +38,16 @@ nbhosting                /Users/tparment/miniconda3/envs/nbhosting
 r2lab-demos              /Users/tparment/miniconda3/envs/r2lab-demos
 ```
 
-* then clicking in any notebook under `~/git/flotpython-tutorial` will run inside the `flotpython-tutorial` conda env, 
+* then clicking in any notebook under `~/git/flotpython-tutorial` will run inside the `flotpython-tutorial` conda env,
 * while any notebook under `~/git/nbautoeval` will end up running in the `base` conda env
-
 
 ### Expectations, and convention about `nbextensions`
 
 There are a few additional assumptions made by the system:
 
 * when a conda env is found, it must also - of course - have `jupyter` installed locally; a warning is issued otherwise and this env is not used
-* when no suitable `venv` can be found, then the notebook is opened inside the `base` conda env; as of this writing this means that `mac-notebook` might not work without miniconda installed 
-* conda envs are searched in `~/miniconda3/envs` 
+* when no suitable `venv` can be found, then the notebook is opened inside the `base` conda env; as of this writing this means that `mac-notebook` might not work without miniconda installed
+* conda envs are searched in `~/miniconda3/envs`
 
 **NOTE:** as of now, installation is **not** automated, follow instruction
 *below.
@@ -68,7 +67,7 @@ Once installed (see below), from a terminal you just run:
 
 You need to create symlinks in your `PATH`; for example (tweak according to your needs):
 
-```
+```bash
 cd ~/git
 git clone https://github.com/parmentelat/mac-notebook.git
 ln -sf ~/git/mac-notebook/bin/macnb-bashrc /usr/local/bin
@@ -90,7 +89,7 @@ Under automator:
 * change `Pass input:` to `as arguments`
 * then replace the script with (assuming you installed in `/usr/local/bin`)
 
-```
+```bash
 /usr/local/bin/macnb-open "$@" &
 ```
 
@@ -108,7 +107,7 @@ From that point, you can select this application from the finder:
 
 It's nicer if your app shows the jupyter logo:
 
-```
+```bash
 cp ~/git/mac-notebook/mac-notebook.icns /Applications/mac-notebook.app/Contents/Resources/AutomatorApplet.icns
 ```
 
