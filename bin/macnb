@@ -80,7 +80,8 @@ function relative-path() {
 function list-all-jupyters() {
     echo "============================== "
     local tmpjson=/tmp/$$.json
-    jupyter notebook list --json > $tmpjson
+    jupyter notebook list --json > $tmpjson 2> /dev/null
+    [[ "$?" == 0 ]] || { echo "cannot use jupyter notebook list --json"; return; }
     python3 << EOF
 import json
 with open("$tmpjson") as feed:
